@@ -9,19 +9,23 @@ import time
 import pickle
 import os
 
-
+"""=====================按情况更改========================"""
 # 表url
-url = 'https://docs.qq.com/form/page/DVURQaVNJZkJueVFC#/fill'
+url = 'https://docs.qq.com/form/page/DVUJ6ekZUdXNpQ1NY#/fill'
 
-# 表内容
+# 表内容, 可以模糊匹配
 data = {
-    '请填写姓名': 'xx',
-    '请填写班级': 'xx',
-    '请填写学号': 'xx'
+    '姓名': 'xx',
+    '班级': 'xx',
+    '学号': 'xx'
 }
 
 #年 月 日 时 分 秒
-run_time = [2025, 12, 19, 18, 13, 30]
+run_time = [2025, 12, 22, 15, 33, 30]
+
+# 可选, 运行时间过多少秒提交
+submit_time = 4.0
+"""==================================================="""
 
 # 创建 Edge 浏览器对象
 option = webdriver.EdgeOptions()
@@ -37,49 +41,65 @@ driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
 })
 
 #定时打开网页
-tt = datetime.datetime(run_time[0],run_time[1],run_time[2],run_time[3],run_time[4],run_time[5])
-while True:
-    ct = datetime.datetime.now()
-    if ct >= tt:
-        break
-    time.sleep(0.5)
+tt = datetime.datetime(*run_time).timestamp()
 
 # cookie处理
 cookies_file = 'cookies.pkl'
-need_login = True
 
-if os.path.exists(cookies_file):
-    driver.get(url)
-    # time.sleep(0.5)
+# 检测腾讯文档首页cookie文件是否存在
+base_url = 'https://docs.qq.com'  # 腾讯文档首页
+driver.get(base_url)
+
+if not os.path.exists(cookies_file):
+    try:
+        # 检查首页是否有登录按钮
+        WebDriverWait(driver, 0.5).until(
+            EC.presence_of_element_located((By.XPATH, 
+                "//div[@class='dui-button-container' and text()='登录']"
+            ))
+        )
+
+        print("需要登录...")
+        input("请手动登录后按Enter...\n")
+
+        # 保存cookies
+        cookies = driver.get_cookies()
+        with open(cookies_file, 'wb') as f:
+            pickle.dump(cookies, f)
+
+    except:
+        pass
     
-    with open(cookies_file, 'rb') as f:
-        cookies = pickle.load(f)
-    
-    for cookie in cookies:
+with open(cookies_file, 'rb') as f:
+    cookies = pickle.load(f)
+
+# 向网页添加cookie
+for cookie in cookies:
         try:
             driver.add_cookie(cookie)
         except:
             continue
-    
-    driver.refresh()
-    # time.sleep(0.5)
-    
-    # 检查是否登录成功
-    try:
-        WebDriverWait(driver, 3).until(
-            EC.presence_of_element_located((By.XPATH, "//button[text()='提交']"))
-        )
-        need_login = False
-    except:
-        need_login = True
+driver.refresh()
 
-if need_login:
-    driver.get(url)
-    input("\n请手动登录...\n登录成功点击Enter\n")
-    
-    cookies = driver.get_cookies()
-    with open(cookies_file, 'wb') as f:
-        pickle.dump(cookies, f)
+# 进入填表页面
+driver.get(url)
+
+# 轮询等待定时
+while True:
+    ct = time.time()
+    if ct >= tt:
+        break
+    time.sleep(0.25)
+
+# 切换到填写页面（如果是自己创建的则默认为统计页面）
+try:
+    fill = driver.find_element(
+        By.XPATH, 
+        "//li[contains(@class, 'dui-tabs-bar-item') and text()='填写']"
+    )
+    fill.click()
+except:
+    pass
 
 # 选择
 # k = WebDriverWait(driver, 20).until(
@@ -89,9 +109,9 @@ if need_login:
 
 # 填空
 for key in data:
-    xpath = f"//span[text()='{key}']/ancestor::div[@class='question-title']/following-sibling::div[@class='question-content']//textarea"
+    xpath = f"//span[contains(text(), '{key}')]/ancestor::div[@class='question-title']/following-sibling::div[@class='question-content']//textarea"
     
-    k = WebDriverWait(driver, 2).until(
+    k = WebDriverWait(driver, 1).until(
         EC.element_to_be_clickable((By.XPATH, xpath))
             )
     k.send_keys(data[key])
@@ -108,4 +128,8 @@ confirm_div = driver.find_element(
     By.XPATH, 
     "//div[@class='dui-button-container' and text()='确认']"
 )
+while time.time() - tt < submit_time:
+    time.sleep(0.2)
+
 confirm_div.click()
+    
