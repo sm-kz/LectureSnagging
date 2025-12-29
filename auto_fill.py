@@ -91,6 +91,7 @@ while True:
         break
     time.sleep(0.25)
 
+driver.refresh()
 # 切换到填写页面（如果是自己创建的则默认为统计页面）
 try:
     fill = driver.find_element(
